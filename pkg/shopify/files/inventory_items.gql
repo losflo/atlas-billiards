@@ -1,0 +1,25 @@
+{
+    inventoryItems(first: 50, after: "eyJsYXN0X2lkIjo0NDk5MTY0MTk0NDMxNSwibGFzdF92YWx1ZSI6IjQ0OTkxNjQxOTQ0MzE1In0=") {
+      	edges {
+          	cursor
+          	node {
+                id
+                sku
+                unitCost {
+                    amount
+                    currencyCode
+                }
+                duplicateSkuCount
+                variant {
+                    id
+                    displayName
+                    id
+                    sku
+                    barcode
+                    inventoryQuantity
+                    price
+                }
+            }
+        }
+    }
+}

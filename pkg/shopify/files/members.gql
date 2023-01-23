@@ -1,0 +1,43 @@
+{
+	customers(first:100) {
+		edges {
+            node {
+                id
+                email
+                firstName
+                lastName
+                defaultAddress{
+                    address1
+                    address2
+                    city
+                    state:province
+                    zip
+                    countryCodeV2
+                    region:provinceCode
+                    company
+                }
+                addresses{
+                    address1
+                    address2
+                    city
+                    state:province
+                    zip
+                    countryCodeV2
+                    region:provinceCode
+                    company
+                }
+                phone
+                taxExempt
+                taxExemptions
+                customer_number:metafield(namespace: "custom", key:"customer_number") {
+                    value
+                }
+                tax_exempt_id:metafield(namespace: "custom", key: "tax_exept_id") {
+                    value
+                }
+                tags
+                createdAt
+            }
+        }
+	}
+}

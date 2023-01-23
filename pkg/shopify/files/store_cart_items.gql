@@ -1,0 +1,22 @@
+{
+    order(id: "gid://shopify/Order/5056159154427"){
+        id
+        order_number:name
+        lineItems(first: 250){
+          nodes{
+            id
+            product{
+              title
+              handle
+            }
+            variant{
+              title
+              sku
+              price
+              weight
+            }
+            quantity
+          }
+        }
+    }
+}
