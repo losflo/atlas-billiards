@@ -24,15 +24,19 @@ type Order struct {
 	TotalShippingPriceSet                PriceSet       `json:"totalShippingPriceSet"`
 	TotalPriceSet                        PriceSet       `json:"totalPriceSet"`
 	LineItems                            []LineItem     `json:"lineItems"`
+	DisplayFulfillmentStatus             string         `json:"displayFulfillmentStatus"`
+	DisplayFinancialStatus               string         `json:"displayFinancialStatus"`
+	Test                                 bool           `json:"test"`
+	Closed                               bool           `json:"closed"`
 }
 
 type PresentmentMoney struct {
-	Amount      float64 `json:"amount"`
+	Amount      float64 `json:"amount,string"`
 	CurrentCode string  `json:"currencyCode"`
 }
 
 type PriceSet struct {
-	PresentmentMoney PresentmentMoney `json:"presentMoney"`
+	PresentmentMoney PresentmentMoney `json:"presentmentMoney"`
 }
 
 type PaymentTerms struct {
@@ -46,6 +50,10 @@ type LineItem struct {
 	Variant  Variant `json:"variant"`
 	Quantity int     `json:"quantity"`
 }
+
+func (o Order) Raw() string {
+	return string(o.raw)
+} // ./Raw
 
 func (o *Order) UnmarshalJSON(data []byte) error {
 	type order struct {
@@ -68,6 +76,9 @@ func (o *Order) UnmarshalJSON(data []byte) error {
 		LineItems                            struct {
 			Nodes []LineItem `json:"nodes"`
 		} `json:"lineItems"`
+		DisplayFulfillmentStatus string `json:"displayFulfillmentStatus"`
+		Test                     bool   `json:"test"`
+		Closed                   bool   `json:"closed"`
 	}
 	var _o order
 	err := json.Unmarshal(data, &_o)
@@ -93,6 +104,9 @@ func (o *Order) UnmarshalJSON(data []byte) error {
 		TotalShippingPriceSet:                _o.TotalShippingPriceSet,
 		TotalPriceSet:                        _o.TotalPriceSet,
 		LineItems:                            _o.LineItems.Nodes,
+		DisplayFulfillmentStatus:             _o.DisplayFulfillmentStatus,
+		Test:                                 _o.Test,
+		Closed:                               _o.Closed,
 	}
 	return nil
 }
