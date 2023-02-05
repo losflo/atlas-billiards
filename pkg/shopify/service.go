@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/csv"
 	"fmt"
+	"io"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -33,6 +35,386 @@ func NewService(conf Config) *Service {
 		endpoint:    fmt.Sprintf("https://%s.myshopify.com/admin/api/2023-01/graphql.json", conf.Shop),
 	}
 } // ./NewService
+
+func (s Service) writeMembersLine(c Customer, w *csv.Writer) error {
+	tags := map[string]bool{}
+	for _, v := range c.Tags {
+		tags[v] = true
+	}
+	priceClass := "Retail"
+	if _, ok := tags["wholesale"]; ok {
+		priceClass = "Wholesale"
+	}
+	a := MailingAddress{}
+	if c.DefaultAddress != nil {
+		a = *c.DefaultAddress
+	}
+	company := ""
+	if a.Company == "NULL" || a.Company == "Null" || a.Company == "null" {
+		company = ""
+	} else {
+		company = a.Company
+	}
+	err := w.Write([]string{
+		c.ID,
+		c.CustomerNumber.Value,
+		c.Email,
+		c.FirstName,
+		c.LastName,
+		company,
+		a.Address1,
+		ReplaceNull(a.Address2),
+		a.City,
+		a.State,
+		a.Zip,
+		a.Country,
+		a.Region,
+		FormatPhone(c.Phone),
+		"",
+		FormatPhone(c.Phone),
+		"",
+		priceClass,
+		"Yes",
+		date.ToSolomonDateFormat(c.CreatedAt),
+		"",
+		"",
+	})
+	if err != nil {
+		return err
+	}
+	w.Flush()
+	return nil
+} // ./writeMembersLine
+
+func (s Service) writeLineItems(orderNumber string, ll []LineItem, w *csv.Writer) error {
+	for _, l := range ll {
+		// sep := strings.Split(l.ID, "/")
+		// id := sep[len(sep)-1]
+		w.Write([]string{
+			l.ID,
+			strings.Replace(orderNumber, "#", "", -1),
+			"", // TODO: ITEM VARIANT ID
+			l.Variant.Price,
+			"0.00",
+			"False",
+			l.Variant.Sku,
+			"Each",
+			fmt.Sprintf("%d", l.Quantity),
+			l.Variant.Title,
+			fmt.Sprintf("%.4f", l.Variant.Weight),
+			l.Variant.Price,
+			"", // EXTRA PRICE
+			"", // OPTION ID
+			"", // OPTION ID NUMBER MODIFIER
+		})
+		w.Flush()
+	}
+	return nil
+} // ./writeLineItems
+
+func (s Service) updateCustomerMetafields(c Customer) error {
+	client := graphql.NewClient(s.endpoint)
+	rq := graphql.NewRequest(`
+		mutation updateCustomerMetafields($input: CustomerInput!) {
+			customerUpdate(input: $input) {
+				customer {
+					id
+					metafields(first: 3) {
+						edges {
+							node {
+								id
+								namespace
+								key
+								value
+							}
+						}
+					}
+				}
+				userErrors {
+					message
+					field
+				}
+			}
+	  	}
+	`)
+	type metafields struct {
+		ID  string `json:"id,omitempty"`
+		Ns  string `json:"namespace"`
+		Key string `json:"key"`
+		Val string `json:"value"`
+	}
+	type input struct {
+		Metafields []metafields `json:"metafields"`
+		ID         string       `json:"id"`
+	}
+	in := input{
+		Metafields: []metafields{
+			{
+				ID:  c.CustomerNumber.ID,
+				Ns:  "custom",
+				Key: "customer_number",
+				Val: c.CustomerNumber.Value,
+			},
+			{
+				ID:  c.TaxExemptID.ID,
+				Ns:  "custom",
+				Key: "tax_exempt_id",
+				Val: c.TaxExemptID.Value,
+			},
+		},
+		ID: c.ID,
+	}
+	rq.Var("input", in)
+	rq.Header.Add("X-Shopify-Access-Token", s.accessToken)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	type response struct {
+		CustomerUpdate *struct {
+			Customer Customer `json:"customer"`
+		} `json:"customerUpdate"`
+		UserErrors struct {
+			Message string `json:"message"`
+			Field   string `json:"field"`
+		} `json:"userErrors"`
+	}
+	var i GetRaw
+	// var i response
+
+	err := client.Run(ctx, rq, &i)
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(i.Raw))
+	return nil
+} // ./updateCustomerMetafields
+
+func (s Service) updateOrderTags(o Order, tags []string) error {
+	return nil
+} // ./updateOrderTags
+
+func (s Service) OrderClosedAddArchiveTag() error {
+	return nil
+} // ./OrderClosedAddArchiveTag
+
+func (s Service) SolomonMembersMapMetafields() error {
+	type custInfo struct {
+		CustomerNumber string
+		TaxID          string
+	}
+
+	emailsMap := map[string]custInfo{}
+	addressMap := map[string]custInfo{}
+
+	fsol, err := os.OpenFile("solomon_members_clean.csv", os.O_RDONLY, 0644)
+	if err != nil {
+		panic(err)
+	}
+	defer fsol.Close()
+	rsol := csv.NewReader(fsol)
+	for {
+		/*
+			CustomerNumber: 0
+			LastName: 1
+			Address1: 2
+			Address2: 3
+			City: 4
+			State: 5
+			Zip: 6
+			Country: 7
+			ResaleCertificateNumber: 8
+			ResaleState: 9
+			Email: 10
+		*/
+		rows, err := rsol.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		email := strings.ToLower(rows[10])
+		if email == "test@cuestik.com" {
+			continue
+		}
+		emailsMap[email] = custInfo{
+			CustomerNumber: rows[0],
+			TaxID:          rows[8],
+		}
+
+		addr := strings.ToLower(rows[2])
+		addressMap[addr] = custInfo{
+			CustomerNumber: rows[0],
+			TaxID:          rows[8],
+		}
+	}
+
+	client := graphql.NewClient(s.endpoint)
+	type response struct {
+		Customers struct {
+			Edges []struct {
+				Customer Customer `json:"node"`
+			} `json:"edges"`
+			PageInfo struct {
+				StartCursor string `json:"startCursor"`
+				EndCursor   string `json:"endCursor"`
+				HasNextPage bool   `json:"hasNextPage"`
+			} `json:"pageInfo"`
+		} `json:"customers"`
+	}
+
+	var i response
+	ctx := context.Background()
+	hasNextPage := true
+	after := ""
+	for hasNextPage {
+		rq := graphql.NewRequest(fmt.Sprintf(`
+			{
+				customers(first:150%s) {
+					edges {
+						node {
+							id
+							email
+							firstName
+							lastName
+							defaultAddress{
+								address1
+								address2
+								city
+								state:province
+								zip
+								countryCodeV2
+								region:provinceCode
+								company
+							}
+							addresses{
+								address1
+								address2
+								city
+								state:province
+								zip
+								countryCodeV2
+								region:provinceCode
+								company
+							}
+							phone
+							taxExempt
+							taxExemptions
+							customer_number:metafield(namespace: "custom", key:"customer_number") {
+								id
+								value
+							}
+							tax_exempt_id:metafield(namespace: "custom", key: "tax_exempt_id") {
+								id
+								value
+							}
+							tags
+							createdAt
+						}
+					}
+					pageInfo {
+						startCursor
+						endCursor
+						hasNextPage
+					}
+				}
+			}
+		`, after))
+		rq.Header.Add("X-Shopify-Access-Token", s.accessToken)
+
+		err = client.Run(ctx, rq, &i)
+		if err != nil {
+			return err
+		}
+
+		for _, e := range i.Customers.Edges {
+			c := e.Customer
+			tags := map[string]bool{}
+			for _, v := range c.Tags {
+				tags[v] = true
+			}
+			a := MailingAddress{}
+			if c.DefaultAddress != nil {
+				a = *c.DefaultAddress
+			}
+
+			custNumber := ""
+			taxID := ""
+			found := false
+
+			if v, ok := emailsMap[strings.ToLower(c.Email)]; ok {
+				found = true
+				if c.CustomerNumber.Value != "" {
+					custNumber = c.CustomerNumber.Value
+				} else {
+					custNumber = v.CustomerNumber
+				}
+				if c.TaxExemptID.Value != "" {
+					taxID = c.CustomerNumber.Value
+				} else {
+					taxID = v.TaxID
+				}
+			} else {
+				// email not found try address match
+				// fmt.Printf("%s not found\n", strings.ToLower(c.Email))
+				rgx := regexp.MustCompile(`\s\s+`)
+				cleanAddr := a.Address1
+				cleanAddr = rgx.ReplaceAllString(cleanAddr, " ")
+				cleanAddr = strings.TrimSpace(strings.ToLower(cleanAddr))
+				if _, ok := addressMap[cleanAddr]; ok {
+					found = true
+					if c.CustomerNumber.Value != "" {
+						custNumber = c.CustomerNumber.Value
+					} else {
+						custNumber = v.CustomerNumber
+					}
+					if c.TaxExemptID.Value != "" {
+						taxID = c.CustomerNumber.Value
+					} else {
+						taxID = v.TaxID
+					}
+				}
+			}
+			// not found
+			// check if metafields already set
+			// if set, replace custNumber and taxID
+			if !found {
+				if c.CustomerNumber.Value != "" {
+					custNumber = c.CustomerNumber.Value
+
+				}
+				if c.TaxExemptID.Value != "" {
+					taxID = c.TaxExemptID.Value
+				}
+			}
+			if strings.ToUpper(custNumber) == "NULL" {
+				custNumber = ""
+			}
+			if taxID != "" {
+				cleantid := strings.ToLower(strings.ReplaceAll(taxID, " ", ""))
+				if cleantid == "idonothaveone" {
+					taxID = ""
+				}
+				if strings.ToUpper(taxID) == "NULL" {
+					taxID = ""
+				}
+			}
+			c.CustomerNumber.Value = custNumber
+			c.TaxExemptID.Value = taxID
+			if i.Customers.PageInfo.HasNextPage {
+				after = fmt.Sprintf(" after: \"%s\"", i.Customers.PageInfo.EndCursor)
+			}
+
+			hasNextPage = i.Customers.PageInfo.HasNextPage
+			err = s.updateCustomerMetafields(c)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+} // ./SolomonMembersMapMetafields
 
 func (s Service) SolomonMembersExport() error {
 	client := graphql.NewClient(s.endpoint)
@@ -124,7 +506,7 @@ func (s Service) SolomonMembersExport() error {
 							customer_number:metafield(namespace: "custom", key:"customer_number") {
 								value
 							}
-							tax_exempt_id:metafield(namespace: "custom", key: "tax_exept_id") {
+							tax_exempt_id:metafield(namespace: "custom", key: "tax_exempt_id") {
 								value
 							}
 							tags
@@ -166,7 +548,7 @@ func (s Service) SolomonMembersExport() error {
 				company = a.Company
 			}
 			err := w.Write([]string{
-				"",
+				c.Customer.ID,
 				c.Customer.CustomerNumber.Value,
 				c.Customer.Email,
 				c.Customer.FirstName,
@@ -202,7 +584,7 @@ func (s Service) SolomonMembersExport() error {
 	return nil
 } // ./SolomonMembersExport
 
-func (s Service) SolomonStoreOrdersAndCartItemsExport() error {
+func (s Service) GenSolonomFiles() error {
 	client := graphql.NewClient(s.endpoint)
 
 	// init store orders file
@@ -284,6 +666,40 @@ func (s Service) SolomonStoreOrdersAndCartItemsExport() error {
 	})
 	wCartItems.Flush()
 
+	// init members items file
+	fMembers, err := os.OpenFile("MEMBERS.txt", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
+	if err != nil {
+		return err
+	}
+	defer fMembers.Close()
+
+	wMembers := csv.NewWriter(fMembers)
+	wMembers.Write([]string{
+		"MEMBER_ID",
+		"CustId",
+		"EMAIL",
+		"FIRST_NAME",
+		"LAST_NAME",
+		"COMPANY_NAME",
+		"ADDRESS1",
+		"ADDRESS2",
+		"CITY",
+		"STATE_CODE",
+		"ZIP",
+		"COUNTRY_CODE",
+		"REGION",
+		"PHONE",
+		"FAX",
+		"CELL",
+		"Terms",
+		"PRICE_CLASS",
+		"APPROVAL_PENDING",
+		"DATE_CREATED",
+		"LAST_UPDATED",
+		"NOTES",
+	})
+	wMembers.Flush()
+
 	type response struct {
 		Orders struct {
 			Edges []struct {
@@ -305,7 +721,7 @@ func (s Service) SolomonStoreOrdersAndCartItemsExport() error {
 	for hasNextPage {
 		rq := graphql.NewRequest(fmt.Sprintf(`
 			{
-				orders(first:1%s){
+				orders(first:1%s, query:"test:false AND fulfillment_status:fulfilled AND -financial_status:authorized AND tag_not:exported AND tag_not:archived"){
 					edges{
 						node{
 							id
@@ -316,7 +732,7 @@ func (s Service) SolomonStoreOrdersAndCartItemsExport() error {
 								customer_number:metafield(namespace: "custom", key:"customer_number") {
 									value
 								}
-								tax_exempt_id:metafield(namespace: "custom", key: "tax_exept_id") {
+								tax_exempt_id:metafield(namespace: "custom", key: "tax_exempt_id") {
 									value
 								}
 							}
@@ -396,6 +812,9 @@ func (s Service) SolomonStoreOrdersAndCartItemsExport() error {
 									quantity
 								}
 							}
+							displayFinancialStatus
+							displayFulfillmentStatus
+							closed
 						}
 					}
 					pageInfo{
@@ -407,22 +826,36 @@ func (s Service) SolomonStoreOrdersAndCartItemsExport() error {
 		`, after))
 		rq.Header.Add("X-Shopify-Access-Token", s.accessToken)
 		var rs response
+		// var i GetRaw
 		err := client.Run(ctx, rq, &rs)
 		if err != nil {
 			return err
 		}
 		for _, e := range rs.Orders.Edges {
 			o := e.Order
+			// if o.Closed {
+			// 	continue
+			// }
+			if o.DisplayFulfillmentStatus != "FULFILLED" {
+				continue
+			}
+			if o.Test {
+				continue
+			}
 			c := o.Customer
+			err = s.writeMembersLine(c, wMembers)
+			if err != nil {
+				return err
+			}
 			billA := o.BillingAddress
 			shipA := o.ShippingAddress
 			if o.BillingAddressMatchesShippingAddress {
 				billA = shipA
 			}
-			sep := strings.Split(o.ID, "/")
-			id := sep[len(sep)-1]
+			// sep := strings.Split(o.ID, "/")
+			// id := sep[len(sep)-1]
 			err := wOrders.Write([]string{
-				id,
+				o.ID,
 				c.CustomerNumber.Value,
 				strings.Replace(o.OrderNumber, "#", "", -1),
 				"WEB",
@@ -464,25 +897,10 @@ func (s Service) SolomonStoreOrdersAndCartItemsExport() error {
 				return err
 			}
 			wOrders.Flush()
-			for _, l := range o.LineItems {
-				wCartItems.Write([]string{
-					"",
-					strings.Replace(o.OrderNumber, "#", "", -1),
-					"", // TODO: ITEM VARIANT ID
-					l.Variant.Price,
-					"0.00",
-					"False",
-					l.Variant.Sku,
-					"Each",
-					fmt.Sprintf("%d", l.Quantity),
-					l.Variant.Title,
-					fmt.Sprintf("%.4f", l.Variant.Weight),
-					l.Variant.Price,
-					"", // EXTRA PRICE
-					"", // OPTION ID
-					"", // OPTION ID NUMBER MODIFIER
-				})
-				wCartItems.Flush()
+
+			err = s.writeLineItems(o.OrderNumber, o.LineItems, wCartItems)
+			if err != nil {
+				return err
 			}
 		}
 		if rs.Orders.PageInfo.HasNextPage {
@@ -491,7 +909,7 @@ func (s Service) SolomonStoreOrdersAndCartItemsExport() error {
 		hasNextPage = rs.Orders.PageInfo.HasNextPage
 	}
 	return nil
-} // ./SolomongStoreOrdersAndCartItemsExport
+} // ./GenSolonomFiles
 
 func (s Service) SolomonInventoryExport() error {
 	client := graphql.NewClient(s.endpoint)
