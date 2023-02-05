@@ -22,6 +22,7 @@ type Customer struct {
 }
 
 type Metafield struct {
+	ID    string `json:"id"`
 	Value string `json:"value"`
 }
 
@@ -31,6 +32,7 @@ func (m *Metafield) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 	type avoidStackOverflow struct {
+		ID    string `json:"id"`
 		Value string `json:"value"`
 	}
 	var a avoidStackOverflow
