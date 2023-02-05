@@ -13,15 +13,7 @@ func main() {
 		Shop:        os.Getenv("ATLAS_BILLIARDS_SHOPIFY_SHOP"),
 	}
 	s := shopify.NewService(conf)
-	// err = s.SolomonMembersExport()
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// err = s.SolomonStoreOrdersAndCartItemsExport()
-	// if err != nil {
-	// 	panic(err)
-	// }
-	err = s.SolomonInventoryExport()
+	err = s.GenSolonomFiles()
 	if err != nil {
 		panic(err)
 	}
