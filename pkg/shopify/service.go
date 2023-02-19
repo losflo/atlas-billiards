@@ -5,7 +5,6 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"regexp"
 	"strconv"
@@ -1117,9 +1116,16 @@ func (s Service) UploadInventory() error {
 		if err != nil {
 			return err
 		}
-		quantity = 1
-		fmt.Println(quantity)
-		err = ii.UpdateQuantity(quantity)
+		available := ii.InventoryLevel.Available
+		delta := 0
+		if quantity > available {
+			delta = quantity - available
+		} else if quantity == available {
+			delta = 0
+		} else {
+			delta = -(available - quantity)
+		}
+		err = ii.UpdateQuantity(delta)
 		if err != nil {
 			return err
 		}
@@ -1130,7 +1136,7 @@ func (s Service) UploadInventory() error {
 
 func (s Service) inventoryItemBySku(sku string) (*InventoryItem, error) {
 	client := graphql.NewClient(s.endpoint)
-	client.Log = func(s string) { log.Println(s) }
+	// client.Log = func(s string) { log.Println(s) }
 	rq := graphql.NewRequest(fmt.Sprintf(`
 		{
 			inventoryItems(query: "sku:'%s'", first: 10) {
