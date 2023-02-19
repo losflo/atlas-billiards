@@ -5,8 +5,10 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,10 +16,16 @@ import (
 	"github.com/machinebox/graphql"
 )
 
+type apiMeta struct {
+	accessToken   string
+	shop          string
+	endpoint      string
+	adminEndpoint string
+	locationID    string
+}
+
 type Service struct {
-	accessToken string
-	shop        string
-	endpoint    string
+	apiMeta
 }
 
 type Config struct {
@@ -30,9 +38,13 @@ func NewService(conf Config) *Service {
 		panic("Shop and AccessToken required")
 	}
 	return &Service{
-		accessToken: conf.AccessToken,
-		shop:        conf.Shop,
-		endpoint:    fmt.Sprintf("https://%s.myshopify.com/admin/api/2023-01/graphql.json", conf.Shop),
+		apiMeta: apiMeta{
+			accessToken:   conf.AccessToken,
+			shop:          conf.Shop,
+			endpoint:      fmt.Sprintf("https://%s.myshopify.com/admin/api/2023-01/graphql.json", conf.Shop),
+			adminEndpoint: fmt.Sprintf("https://%s.myshopify.com/admin/api/2023-01", conf.Shop),
+			locationID:    "gid://shopify/Location/71752646907",
+		},
 	}
 } // ./NewService
 
@@ -1049,9 +1061,121 @@ func (s Service) SolomonInventoryExport() error {
 	return nil
 } // ./SolomonInventoryExport
 
+func (s Service) UploadInventory() error {
+	f, err := os.OpenFile("ABS Inventory Quantities.txt", os.O_RDONLY, 0644)
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+
+	fnis, err := os.OpenFile("not_in_shopify.csv", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer fnis.Close()
+	w := csv.NewWriter(fnis)
+
+	r := csv.NewReader(f)
+	r.Comma = '\t'
+	r.FieldsPerRecord = -1
+	first := true
+	for {
+		/*
+			InventoryID: 0
+			Description: 1
+			StockingUOM: 2
+			PurchasingUOM: 3
+			SellingUOM: 4
+			StatusCode: 5
+			Quantity: 6
+		*/
+		row, err := r.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		if first {
+			w.Write(row)
+			first = false
+			continue
+		}
+		sku := strings.TrimSpace(row[0])
+		ii, err := s.inventoryItemBySku(sku)
+		if err != nil {
+			fmt.Printf("sku %s: %s\n", sku, err.Error())
+			w.Write(row)
+			continue
+		}
+		if ii == nil {
+			fmt.Printf("sku %s not in Shopify\n", sku)
+			w.Write(row)
+			continue
+		}
+		quantity, err := strconv.Atoi(row[6])
+		if err != nil {
+			return err
+		}
+		quantity = 1
+		fmt.Println(quantity)
+		err = ii.UpdateQuantity(quantity)
+		if err != nil {
+			return err
+		}
+		break
+	}
+	return nil
+} // ./UploadInventory
+
+func (s Service) inventoryItemBySku(sku string) (*InventoryItem, error) {
+	client := graphql.NewClient(s.endpoint)
+	client.Log = func(s string) { log.Println(s) }
+	rq := graphql.NewRequest(fmt.Sprintf(`
+		{
+			inventoryItems(query: "sku:'%s'", first: 10) {
+				edges{
+					node{
+						id
+						sku
+						inventoryLevel(locationId: "%s"){
+							id
+							available
+						}
+					}
+				}
+			}
+		}
+	`, sku, s.locationID))
+	type response struct {
+		InventoryItems struct {
+			Edges []struct {
+				Node InventoryItem `json:"node"`
+			} `json:"edges"`
+		} `json:"inventoryItems"`
+	}
+	rq.Header.Add("X-Shopify-Access-Token", s.accessToken)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	var res response
+	err := client.Run(ctx, rq, &res)
+	if err != nil {
+		return nil, err
+	}
+	if len(res.InventoryItems.Edges) > 1 {
+		fmt.Println("duplicate skus for ", sku)
+	}
+	if len(res.InventoryItems.Edges) == 0 {
+		return nil, nil
+	}
+	ii := res.InventoryItems.Edges[0].Node
+	ii.apiMeta = s.apiMeta
+	return &ii, nil
+} // ./InventoryItemBySku
+
 func FormatPhone(s string) string {
 	return strings.Replace(s, "+1", "", -1)
-}
+} // ./FormatPhone
 
 func ReplaceNull(s string) string {
 	return strings.Replace(s, "NULL", "", -1)
