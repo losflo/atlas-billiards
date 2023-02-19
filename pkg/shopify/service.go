@@ -55,8 +55,10 @@ func (s Service) writeMembersLine(c Customer, w *csv.Writer) error {
 	} else {
 		company = a.Company
 	}
+	sepMem := strings.Split(c.ID, "/")
+	memID := sepMem[len(sepMem)-1]
 	err := w.Write([]string{
-		c.ID,
+		memID,
 		c.CustomerNumber.Value,
 		c.Email,
 		c.FirstName,
@@ -88,10 +90,11 @@ func (s Service) writeMembersLine(c Customer, w *csv.Writer) error {
 
 func (s Service) writeLineItems(orderNumber string, ll []LineItem, w *csv.Writer) error {
 	for _, l := range ll {
-		// sep := strings.Split(l.ID, "/")
+		sepLI := strings.Split(l.ID, "/")
+		LIID := sepLI[len(sepLI)-1]
 		// id := sep[len(sep)-1]
 		w.Write([]string{
-			l.ID,
+			LIID,
 			strings.Replace(orderNumber, "#", "", -1),
 			"", // TODO: ITEM VARIANT ID
 			l.Variant.Price,
@@ -282,7 +285,7 @@ func (s Service) SolomonMembersMapMetafields() error {
 								address1
 								address2
 								city
-								state:province
+								state:provinceCode
 								zip
 								countryCodeV2
 								region:provinceCode
@@ -292,7 +295,7 @@ func (s Service) SolomonMembersMapMetafields() error {
 								address1
 								address2
 								city
-								state:province
+								state:provinceCode
 								zip
 								countryCodeV2
 								region:provinceCode
@@ -484,7 +487,7 @@ func (s Service) SolomonMembersExport() error {
 								address1
 								address2
 								city
-								state:province
+								state:provinceCode
 								zip
 								countryCodeV2
 								region:provinceCode
@@ -494,7 +497,7 @@ func (s Service) SolomonMembersExport() error {
 								address1
 								address2
 								city
-								state:province
+								state:provinceCode
 								zip
 								countryCodeV2
 								region:provinceCode
@@ -729,12 +732,39 @@ func (s Service) GenSolonomFiles() error {
 							customer{
 								id
 								email
+								firstName
+								lastName
+								defaultAddress{
+									address1
+									address2
+									city
+									state:provinceCode
+									zip
+									countryCodeV2
+									region:provinceCode
+									company
+								}
+								addresses{
+									address1
+									address2
+									city
+									state:provinceCode
+									zip
+									countryCodeV2
+									region:provinceCode
+									company
+								}
+								phone
+								taxExempt
+								taxExemptions
 								customer_number:metafield(namespace: "custom", key:"customer_number") {
 									value
 								}
 								tax_exempt_id:metafield(namespace: "custom", key: "tax_exempt_id") {
 									value
 								}
+								tags
+								createdAt
 							}
 							billingAddress{
 								firstName
@@ -743,7 +773,7 @@ func (s Service) GenSolonomFiles() error {
 								address1
 								address2
 								city
-								state:province
+								state:provinceCode
 								zip
 								countryCodeV2
 								region:provinceCode
@@ -757,7 +787,7 @@ func (s Service) GenSolonomFiles() error {
 								address1
 								address2
 								city
-								state:province
+								state:provinceCode
 								zip
 								countryCodeV2
 								region:provinceCode
@@ -852,16 +882,20 @@ func (s Service) GenSolonomFiles() error {
 			if o.BillingAddressMatchesShippingAddress {
 				billA = shipA
 			}
-			// sep := strings.Split(o.ID, "/")
-			// id := sep[len(sep)-1]
+			sep := strings.Split(o.ID, "/")
+			id := sep[len(sep)-1]
+
+			sepMem := strings.Split(c.ID, "/")
+			memID := sepMem[len(sepMem)-1]
+
 			err := wOrders.Write([]string{
-				o.ID,
+				id,
 				c.CustomerNumber.Value,
 				strings.Replace(o.OrderNumber, "#", "", -1),
 				"WEB",
-				"", // TODO: MEMBER ID
+				memID, // MEMBER ID
 				billA.FirstName,
-				billA.FirstName,
+				billA.LastName,
 				billA.Company,
 				billA.Address1,
 				billA.Address2,
@@ -871,7 +905,7 @@ func (s Service) GenSolonomFiles() error {
 				billA.Zip,
 				FormatPhone(billA.Phone),
 				shipA.FirstName,
-				shipA.FirstName,
+				shipA.LastName,
 				shipA.Company,
 				shipA.Address1,
 				shipA.Address2,
@@ -880,6 +914,8 @@ func (s Service) GenSolonomFiles() error {
 				shipA.Country,
 				shipA.Zip,
 				FormatPhone(shipA.Phone),
+				"NA", // SHIPPING CODE
+				"CC", // TERMS
 				c.Email,
 				fmt.Sprintf("%.2f", o.SubtotalPriceSet.PresentmentMoney.Amount),
 				fmt.Sprintf("%.2f", o.SubtotalPriceSet.PresentmentMoney.Amount),
@@ -887,11 +923,12 @@ func (s Service) GenSolonomFiles() error {
 				fmt.Sprintf("%.2f", o.TotalShippingPriceSet.PresentmentMoney.Amount),
 				fmt.Sprintf("%.2f", o.TotalPriceSet.PresentmentMoney.Amount),
 				date.ToSolomonDateFormat(o.CreatedAt),
-				"", // TODO: PROCESS DATE
+				date.ToSolomonDateFormat(o.CreatedAt), // PROCESS DATE TODO: TEMP
 				date.ToSolomonDateFormat(o.ClosedAt),
-				"", // TODO: SHIPPED DATE
-				"", // TODO: SMALL ORDER FEE
-				"", // LARGE ORDER DISCOUNT
+				"",                                    // INVOICED_DATE
+				date.ToSolomonDateFormat(o.CreatedAt), // SHIPPED DATE TODO: TEMP
+				"",                                    // SMALL ORDER FEE
+				"",                                    // LARGE ORDER DISCOUNT
 			})
 			if err != nil {
 				return err
