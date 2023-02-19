@@ -2,6 +2,7 @@ package shopify
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/machinebox/graphql"
@@ -27,16 +28,25 @@ type UnitCost struct {
 	CurrencyCode string      `json:"currencyCode"`
 }
 
+func (ii InventoryItem) SetQuantity(quantity int) error {
+	return nil
+} // ./SetQuantity
+
 func (ii InventoryItem) UpdateQuantity(amountDelta int) error {
-	rq := graphql.NewRequest(`
+	rq := graphql.NewRequest(fmt.Sprintf(`
 		mutation inventoryAdjustQuantity($input: InventoryAdjustQuantityInput!) {
 			inventoryAdjustQuantity(input: $input) {
 				inventoryLevel {
 					id
-					sku
-					inventoryLevel(locationId: "%s"){
+					available
+					incoming
+					item {
 						id
-						available
+						sku
+					}
+					location {
+						id
+						name
 					}
 				}
 				userErrors {
@@ -45,13 +55,15 @@ func (ii InventoryItem) UpdateQuantity(amountDelta int) error {
 				}
 			}
 		}
-	`)
+	`))
 	input := map[string]interface{}{
-		"inventoryLevelId": ii.ID,
+		"inventoryLevelId": ii.InventoryLevel.ID,
 		"availableDelta":   amountDelta,
 	}
 	rq.Var("input", input)
+	rq.Header.Add("X-Shopify-Access-Token", ii.accessToken)
 	client := graphql.NewClient(ii.endpoint)
+	// client.Log = func(s string) { log.Println(s) }
 	type response struct {
 		InventoryAdjustQuantity struct {
 			InventoryLevel InventoryLevel `json:"inventoryLevel"`
