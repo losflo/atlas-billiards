@@ -100,13 +100,19 @@ func (s Service) writeMembersLine(c Customer, w *csv.Writer) error {
 } // ./writeMembersLine
 
 func (s Service) writeLineItems(orderNumber string, ll []LineItem, w *csv.Writer) error {
+	if strings.HasPrefix(orderNumber, "#") {
+		orderNumber = strings.ReplaceAll(orderNumber, "#", "")
+		if !strings.HasPrefix(orderNumber, "130000") {
+			orderNumber = "130000" + orderNumber
+		}
+	}
 	for _, l := range ll {
 		sepLI := strings.Split(l.ID, "/")
 		LIID := sepLI[len(sepLI)-1]
 		// id := sep[len(sep)-1]
 		w.Write([]string{
 			LIID,
-			strings.Replace(orderNumber, "#", "", -1),
+			strings.Replace(orderNumber, "#", "130000", -1),
 			"", // TODO: ITEM VARIANT ID
 			l.Variant.Price,
 			"0.00",
@@ -898,11 +904,18 @@ func (s Service) GenSolonomFiles() error {
 
 			sepMem := strings.Split(c.ID, "/")
 			memID := sepMem[len(sepMem)-1]
+			orderNumber := o.OrderNumber
+			if strings.HasPrefix(orderNumber, "#") {
+				orderNumber = strings.ReplaceAll(orderNumber, "#", "")
+				if !strings.HasPrefix(orderNumber, "130000") {
+					orderNumber = "130000" + orderNumber
+				}
+			}
 
 			err := wOrders.Write([]string{
 				id,
 				c.CustomerNumber.Value,
-				strings.Replace(o.OrderNumber, "#", "", -1),
+				orderNumber,
 				"WEB",
 				memID, // MEMBER ID
 				billA.FirstName,
@@ -946,7 +959,7 @@ func (s Service) GenSolonomFiles() error {
 			}
 			wOrders.Flush()
 
-			err = s.writeLineItems(o.OrderNumber, o.LineItems, wCartItems)
+			err = s.writeLineItems(orderNumber, o.LineItems, wCartItems)
 			if err != nil {
 				return err
 			}
