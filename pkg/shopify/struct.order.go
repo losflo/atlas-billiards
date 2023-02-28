@@ -23,6 +23,7 @@ type Order struct {
 	TotalTaxSet                          PriceSet       `json:"totalTaxSet"`
 	TotalShippingPriceSet                PriceSet       `json:"totalShippingPriceSet"`
 	TotalPriceSet                        PriceSet       `json:"totalPriceSet"`
+	TotalReceivedSet                     PriceSet       `json:"totalReceivedSet"`
 	LineItems                            []LineItem     `json:"lineItems"`
 	DisplayFulfillmentStatus             string         `json:"displayFulfillmentStatus"`
 	DisplayFinancialStatus               string         `json:"displayFinancialStatus"`
@@ -73,6 +74,7 @@ func (o *Order) UnmarshalJSON(data []byte) error {
 		TotalTaxSet                          PriceSet       `json:"totalTaxSet"`
 		TotalShippingPriceSet                PriceSet       `json:"totalShippingPriceSet"`
 		TotalPriceSet                        PriceSet       `json:"totalPriceSet"`
+		TotalReceivedSet                     PriceSet       `json:"totalReceivedSet"`
 		LineItems                            struct {
 			Nodes []LineItem `json:"nodes"`
 		} `json:"lineItems"`
@@ -103,6 +105,7 @@ func (o *Order) UnmarshalJSON(data []byte) error {
 		TotalTaxSet:                          _o.TotalTaxSet,
 		TotalShippingPriceSet:                _o.TotalShippingPriceSet,
 		TotalPriceSet:                        _o.TotalPriceSet,
+		TotalReceivedSet:                     _o.TotalReceivedSet,
 		LineItems:                            _o.LineItems.Nodes,
 		DisplayFulfillmentStatus:             _o.DisplayFulfillmentStatus,
 		Test:                                 _o.Test,

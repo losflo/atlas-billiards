@@ -843,6 +843,12 @@ func (s Service) GenSolonomFiles() error {
 									currencyCode
 								}
 							}
+							totalReceivedSet {
+								presentmentMoney {
+									amount
+									currencyCode
+								}
+							}
 							lineItems(first: 250) {
 								nodes{
 									id
@@ -945,7 +951,7 @@ func (s Service) GenSolonomFiles() error {
 				fmt.Sprintf("%.2f", o.SubtotalPriceSet.PresentmentMoney.Amount),
 				fmt.Sprintf("%.2f", o.TotalTaxSet.PresentmentMoney.Amount),
 				fmt.Sprintf("%.2f", o.TotalShippingPriceSet.PresentmentMoney.Amount),
-				fmt.Sprintf("%.2f", o.TotalPriceSet.PresentmentMoney.Amount),
+				fmt.Sprintf("%.2f", o.TotalReceivedSet.PresentmentMoney.Amount),
 				date.ToSolomonDateFormat(o.CreatedAt),
 				date.ToSolomonDateFormat(o.CreatedAt), // PROCESS DATE TODO: TEMP
 				date.ToSolomonDateFormat(o.ClosedAt),
