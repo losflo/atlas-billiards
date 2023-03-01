@@ -38,11 +38,10 @@ func NewService(conf Config) *Service {
 	}
 	return &Service{
 		apiMeta: apiMeta{
-			accessToken:   conf.AccessToken,
-			shop:          conf.Shop,
-			endpoint:      fmt.Sprintf("https://%s.myshopify.com/admin/api/2023-01/graphql.json", conf.Shop),
-			adminEndpoint: fmt.Sprintf("https://%s.myshopify.com/admin/api/2023-01", conf.Shop),
-			locationID:    "gid://shopify/Location/71752646907",
+			accessToken: conf.AccessToken,
+			shop:        conf.Shop,
+			endpoint:    fmt.Sprintf("https://%s.myshopify.com/admin/api/2023-01/graphql.json", conf.Shop),
+			locationID:  "gid://shopify/Location/71752646907",
 		},
 	}
 } // ./NewService
