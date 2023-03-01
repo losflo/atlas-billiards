@@ -24,6 +24,7 @@ type Order struct {
 	TotalShippingPriceSet                PriceSet       `json:"totalShippingPriceSet"`
 	TotalPriceSet                        PriceSet       `json:"totalPriceSet"`
 	TotalReceivedSet                     PriceSet       `json:"totalReceivedSet"`
+	NetPaymentSet                        PriceSet       `json:"netPaymentSet"`
 	LineItems                            []LineItem     `json:"lineItems"`
 	DisplayFulfillmentStatus             string         `json:"displayFulfillmentStatus"`
 	DisplayFinancialStatus               string         `json:"displayFinancialStatus"`
@@ -46,10 +47,22 @@ type PaymentTerms struct {
 }
 
 type LineItem struct {
-	ID       string  `json:"id"`
-	Product  Product `json:"product"`
-	Variant  Variant `json:"variant"`
-	Quantity int     `json:"quantity"`
+	ID                     string   `json:"id"`
+	Product                Product  `json:"product"`
+	Variant                Variant  `json:"variant"`
+	Quantity               int      `json:"quantity"`
+	TotalQuantity          int      `json:"totalQuantity"`
+	NonFulfillableQuantity int      `json:"nonFulfillableQuantity"`
+	Sku                    string   `json:"sku"`
+	VariantTitle           string   `json:"variantTitle"`
+	OriginalUnitPriceSet   PriceSet `json:"originalUnitPriceSet"`
+}
+
+type Refund struct {
+	RefundLineItems []LineItem `json:"refundLineItems"`
+}
+
+type FullfillmentOrder struct {
 }
 
 func (o Order) Raw() string {
@@ -75,6 +88,7 @@ func (o *Order) UnmarshalJSON(data []byte) error {
 		TotalShippingPriceSet                PriceSet       `json:"totalShippingPriceSet"`
 		TotalPriceSet                        PriceSet       `json:"totalPriceSet"`
 		TotalReceivedSet                     PriceSet       `json:"totalReceivedSet"`
+		NetPaymentSet                        PriceSet       `json:"netPaymentSet"`
 		LineItems                            struct {
 			Nodes []LineItem `json:"nodes"`
 		} `json:"lineItems"`
@@ -106,6 +120,7 @@ func (o *Order) UnmarshalJSON(data []byte) error {
 		TotalShippingPriceSet:                _o.TotalShippingPriceSet,
 		TotalPriceSet:                        _o.TotalPriceSet,
 		TotalReceivedSet:                     _o.TotalReceivedSet,
+		NetPaymentSet:                        _o.NetPaymentSet,
 		LineItems:                            _o.LineItems.Nodes,
 		DisplayFulfillmentStatus:             _o.DisplayFulfillmentStatus,
 		Test:                                 _o.Test,
