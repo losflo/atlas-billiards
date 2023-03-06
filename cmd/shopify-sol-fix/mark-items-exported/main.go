@@ -14,6 +14,11 @@ import (
 func main() {
 	token := os.Getenv("ATLAS_BILLIARDS_SHOPIFY_ACCESS_TOKEN")
 	endpoint := fmt.Sprintf("https://%s.myshopify.com/admin/api/2023-01/graphql.json", os.Getenv("ATLAS_BILLIARDS_SHOPIFY_SHOP"))
+	conf := shopify.Config{
+		AccessToken: os.Getenv("ATLAS_BILLIARDS_SHOPIFY_ACCESS_TOKEN"),
+		Shop:        os.Getenv("ATLAS_BILLIARDS_SHOPIFY_SHOP"),
+	}
+	s := shopify.NewService(conf)
 	client := graphql.NewClient(endpoint)
 
 	f, err := os.OpenFile("../orders.csv", os.O_RDONLY, 0644)
@@ -23,16 +28,7 @@ func main() {
 	defer f.Close()
 
 	type response struct {
-		Orders struct {
-			Edges []struct {
-				Order shopify.Order `json:"node"`
-			} `json:"edges"`
-			PageInfo struct {
-				StartCursor string `json:"startCursor"`
-				EndCursor   string `json:"endCursor"`
-				HasNextPage bool   `json:"hasNextPage"`
-			} `json:"pageInfo"`
-		} `json:"orders"`
+		Order shopify.Order `json:"order"`
 	}
 
 	r := csv.NewReader(f)
@@ -44,11 +40,10 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		oid := rows[0]
-
+		oid := fmt.Sprintf("%s/%s", "gid://shopify/Order", rows[0])
 		rq := graphql.NewRequest(fmt.Sprintf(`
 			{
-				order(id:%s){
+				order(id:"%s"){
 					id
 					order_number:name
 					customer{
@@ -178,8 +173,11 @@ func main() {
 		`, oid))
 		rq.Header.Add("X-Shopify-Access-Token", token)
 		var rs response
-		// var i GetRaw
 		err = client.Run(context.Background(), rq, &rs)
+		if err != nil {
+			panic(err)
+		}
+		err = s.UpdateOrderTags(rs.Order, "exported")
 		if err != nil {
 			panic(err)
 		}
