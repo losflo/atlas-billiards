@@ -205,8 +205,8 @@ func main() {
 		w.Write([]string{
 			rs.Order.Customer.CustomerNumber.Value,
 			rs.Order.OrderNumber,
-			fmt.Sprintf("%.2f", rs.Order.TotalTaxSet.PresentmentMoney.Amount),
-			fmt.Sprintf("%.2f", rs.Order.TotalPriceSet.PresentmentMoney.Amount),
+			fmt.Sprintf("%.2f", rs.Order.CurrentTotalTaxSet.PresentmentMoney.Amount),
+			fmt.Sprintf("%.2f", rs.Order.CurrentTotalPriceSet.PresentmentMoney.Amount),
 			fmt.Sprintf("%.2f", rs.Order.NetPaymentSet.PresentmentMoney.Amount),
 		})
 		w.Flush()
