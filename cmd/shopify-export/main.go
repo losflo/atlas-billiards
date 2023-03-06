@@ -13,7 +13,8 @@ func main() {
 		Shop:        os.Getenv("ATLAS_BILLIARDS_SHOPIFY_SHOP"),
 	}
 	s := shopify.NewService(conf)
-	err = s.GenSolonomFiles()
+	query := "test:false AND fulfillment_status:fulfilled AND -financial_status:authorized AND tag_not:exported AND tag_not:archived AND tag:printed AND created_at:2023-02-28"
+	err = s.GenSolonomFiles(query)
 	if err != nil {
 		panic(err)
 	}
