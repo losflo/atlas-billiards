@@ -5,7 +5,9 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
+	"log"
 	"os"
+	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -16,11 +18,10 @@ import (
 )
 
 type apiMeta struct {
-	accessToken   string
-	shop          string
-	endpoint      string
-	adminEndpoint string
-	locationID    string
+	accessToken string
+	shop        string
+	endpoint    string
+	locationID  string
 }
 
 type Service struct {
@@ -98,35 +99,38 @@ func (s Service) writeMembersLine(c Customer, w *csv.Writer) error {
 	return nil
 } // ./writeMembersLine
 
-func (s Service) writeLineItems(orderNumber string, ll []LineItem, w *csv.Writer) error {
+func (s Service) writeLineItems(orderNumber string, ff []Fulfillment, w *csv.Writer) error {
 	if strings.HasPrefix(orderNumber, "#") {
 		orderNumber = strings.ReplaceAll(orderNumber, "#", "")
 		if !strings.HasPrefix(orderNumber, "130000") {
 			orderNumber = "130000" + orderNumber
 		}
 	}
-	for _, l := range ll {
-		sepLI := strings.Split(l.ID, "/")
-		LIID := sepLI[len(sepLI)-1]
-		// id := sep[len(sep)-1]
-		w.Write([]string{
-			LIID,
-			strings.Replace(orderNumber, "#", "130000", -1),
-			"", // TODO: ITEM VARIANT ID
-			l.Variant.Price,
-			"0.00",
-			"False",
-			l.Variant.Sku,
-			"Each",
-			fmt.Sprintf("%d", l.Quantity),
-			l.Variant.Title,
-			fmt.Sprintf("%.4f", l.Variant.Weight),
-			l.Variant.Price,
-			"", // EXTRA PRICE
-			"", // OPTION ID
-			"", // OPTION ID NUMBER MODIFIER
-		})
-		w.Flush()
+	// ll []FulfillmentLineItem
+	for _, v := range ff {
+		for _, l := range v.FulfillmentLineItems.Nodes {
+			sepLI := strings.Split(l.LineItem.ID, "/")
+			LIID := sepLI[len(sepLI)-1]
+			// id := sep[len(sep)-1]
+			w.Write([]string{
+				LIID,
+				strings.Replace(orderNumber, "#", "130000", -1),
+				"", // TODO: ITEM VARIANT ID
+				fmt.Sprintf("%.2f", l.LineItem.DiscountedUnitPriceSet.PresentmentMoney.Amount),
+				"0.00",
+				"False",
+				l.LineItem.Variant.Sku,
+				"Each",
+				fmt.Sprintf("%d", l.LineItem.CurrentQuantity),
+				l.LineItem.Variant.Title,
+				fmt.Sprintf("%.4f", l.LineItem.Variant.Weight),
+				fmt.Sprintf("%.2f", l.LineItem.DiscountedUnitPriceSet.PresentmentMoney.Amount),
+				"", // EXTRA PRICE
+				"", // OPTION ID
+				"", // OPTION ID NUMBER MODIFIER
+			})
+			w.Flush()
+		}
 	}
 	return nil
 } // ./writeLineItems
@@ -209,7 +213,42 @@ func (s Service) updateCustomerMetafields(c Customer) error {
 	return nil
 } // ./updateCustomerMetafields
 
-func (s Service) updateOrderTags(o Order, tags []string) error {
+func (s Service) UpdateOrderTags(o Order, tags ...string) error {
+	client := graphql.NewClient(s.endpoint)
+	rq := graphql.NewRequest(`
+		mutation updateOrderTags($input: OrderInput!) {
+			orderUpdate(input: $input) {
+				order{
+					id
+					tags
+				}
+				userErrors {
+					message
+					field
+				}
+			}
+	  	}
+	`)
+	in := map[string]interface{}{
+		"id":   o.ID,
+		"tags": tags,
+	}
+	rq.Var("input", in)
+	rq.Header.Add("X-Shopify-Access-Token", s.accessToken)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	type response struct {
+		OrderUpdate struct {
+			Order Order `json:"order"`
+		} `json:"orderUpdate"`
+		UserErrors UserErrors `json:"userErrors"`
+	}
+	var res response
+	client.Log = func(s string) { log.Println(s) }
+	err := client.Run(ctx, rq, &res)
+	if err != nil {
+		return err
+	}
 	return nil
 } // ./updateOrderTags
 
@@ -603,7 +642,7 @@ func (s Service) SolomonMembersExport() error {
 	return nil
 } // ./SolomonMembersExport
 
-func (s Service) GenSolonomFiles() error {
+func (s Service) GenSolonomFiles(query string) error {
 	client := graphql.NewClient(s.endpoint)
 
 	// init store orders file
@@ -740,7 +779,7 @@ func (s Service) GenSolonomFiles() error {
 	for hasNextPage {
 		rq := graphql.NewRequest(fmt.Sprintf(`
 			{
-				orders(first:1%s, query:"test:false AND fulfillment_status:fulfilled AND -financial_status:authorized AND tag_not:exported AND tag_not:archived"){
+				orders(first:1%s, query:"%s"){
 					edges{
 						node{
 							id
@@ -818,13 +857,13 @@ func (s Service) GenSolonomFiles() error {
 							createdAt
 							processedAt
 							closedAt
-							subtotalPriceSet{
+							currentSubtotalPriceSet{
 								presentmentMoney{
 									amount
 									currencyCode
 								}
 							}
-							totalTaxSet{
+							currentTotalTaxSet{
 								presentmentMoney{
 									amount
 									currencyCode
@@ -836,7 +875,7 @@ func (s Service) GenSolonomFiles() error {
 									currencyCode
 								}
 							}
-							totalPriceSet{
+							currentTotalPriceSet{
 								presentmentMoney{
 									amount
 									currencyCode
@@ -848,20 +887,39 @@ func (s Service) GenSolonomFiles() error {
 									currencyCode
 								}
 							}
-							lineItems(first: 250) {
-								nodes{
-									id
-									product{
-										title
-										handle
+							fulfillments(first:100) {
+								fulfillmentLineItems(first: 160) {
+									nodes {
+										lineItem {
+											id
+											sku
+											title
+											discountedUnitPriceSet {
+												presentmentMoney {
+													amount
+												}
+											}
+											product {
+												title
+												handle
+											}
+											variant {
+												id
+												displayName
+												title
+												sku
+												price
+												weight
+												inventoryQuantity
+											}
+											currentQuantity
+										}
+										discountedTotalSet {
+											presentmentMoney {
+												amount
+											}
+										}
 									}
-									variant{
-										title
-										sku
-										price
-										weight
-									}
-									quantity
 								}
 							}
 							displayFinancialStatus
@@ -875,10 +933,11 @@ func (s Service) GenSolonomFiles() error {
 					}
 				}
 			}
-		`, after))
+		`, after, query))
 		rq.Header.Add("X-Shopify-Access-Token", s.accessToken)
 		var rs response
 		// var i GetRaw
+		client.Log = func(s string) { log.Println(s) }
 		err := client.Run(ctx, rq, &rs)
 		if err != nil {
 			return err
@@ -946,9 +1005,9 @@ func (s Service) GenSolonomFiles() error {
 				"NA", // SHIPPING CODE
 				"CC", // TERMS
 				c.Email,
-				fmt.Sprintf("%.2f", o.SubtotalPriceSet.PresentmentMoney.Amount),
-				fmt.Sprintf("%.2f", o.SubtotalPriceSet.PresentmentMoney.Amount),
-				fmt.Sprintf("%.2f", o.TotalTaxSet.PresentmentMoney.Amount),
+				fmt.Sprintf("%.2f", o.CurrentSubtotalPriceSet.PresentmentMoney.Amount),
+				fmt.Sprintf("%.2f", o.CurrentSubtotalPriceSet.PresentmentMoney.Amount),
+				fmt.Sprintf("%.2f", o.CurrentTotalTaxSet.PresentmentMoney.Amount),
 				fmt.Sprintf("%.2f", o.TotalShippingPriceSet.PresentmentMoney.Amount),
 				fmt.Sprintf("%.2f", o.TotalReceivedSet.PresentmentMoney.Amount),
 				date.ToSolomonDateFormat(o.CreatedAt),
@@ -964,7 +1023,7 @@ func (s Service) GenSolonomFiles() error {
 			}
 			wOrders.Flush()
 
-			err = s.writeLineItems(orderNumber, o.LineItems, wCartItems)
+			err = s.writeLineItems(orderNumber, o.Fulfillments, wCartItems)
 			if err != nil {
 				return err
 			}
@@ -974,7 +1033,9 @@ func (s Service) GenSolonomFiles() error {
 		}
 		hasNextPage = rs.Orders.PageInfo.HasNextPage
 	}
-	return nil
+	cmd := exec.Command("python3", "format_csv.py", "STORE_ORDERS.txt", "STORE_CART_ITEMS.txt", "MEMBERS.txt")
+	err = cmd.Run()
+	return err
 } // ./GenSolonomFiles
 
 func (s Service) SolomonInventoryExport() error {
