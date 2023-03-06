@@ -19,17 +19,24 @@ type Order struct {
 	CreatedAt                            time.Time      `json:"createdAt"`
 	ProcessedAt                          time.Time      `json:"processedAt"`
 	ClosedAt                             time.Time      `json:"closedAt"`
-	SubtotalPriceSet                     PriceSet       `json:"subtotalPriceSet"`
-	TotalTaxSet                          PriceSet       `json:"totalTaxSet"`
+	CurrentSubtotalPriceSet              PriceSet       `json:"currentSubtotalPriceSet"`
+	CurrentTotalTaxSet                   PriceSet       `json:"currentTotalTaxSet"`
 	TotalShippingPriceSet                PriceSet       `json:"totalShippingPriceSet"`
-	TotalPriceSet                        PriceSet       `json:"totalPriceSet"`
+	CurrentTotalPriceSet                 PriceSet       `json:"currentTotalPriceSet"`
 	TotalReceivedSet                     PriceSet       `json:"totalReceivedSet"`
 	NetPaymentSet                        PriceSet       `json:"netPaymentSet"`
 	LineItems                            []LineItem     `json:"lineItems"`
+	Fulfillments                         []Fulfillment  `json:"fulfillments"`
 	DisplayFulfillmentStatus             string         `json:"displayFulfillmentStatus"`
 	DisplayFinancialStatus               string         `json:"displayFinancialStatus"`
 	Test                                 bool           `json:"test"`
 	Closed                               bool           `json:"closed"`
+}
+
+type Fulfillment struct {
+	FulfillmentLineItems struct {
+		Nodes []FulfillmentLineItem `json:"nodes"`
+	} `json:"fulfillmentLineItems"`
 }
 
 type PresentmentMoney struct {
@@ -51,18 +58,22 @@ type LineItem struct {
 	Product                Product  `json:"product"`
 	Variant                Variant  `json:"variant"`
 	Quantity               int      `json:"quantity"`
+	CurrentQuantity        int      `json:"currentQuantity"`
 	TotalQuantity          int      `json:"totalQuantity"`
 	NonFulfillableQuantity int      `json:"nonFulfillableQuantity"`
 	Sku                    string   `json:"sku"`
 	VariantTitle           string   `json:"variantTitle"`
 	OriginalUnitPriceSet   PriceSet `json:"originalUnitPriceSet"`
+	DiscountedUnitPriceSet PriceSet `json:"discountedUnitPriceSet"`
 }
 
 type Refund struct {
 	RefundLineItems []LineItem `json:"refundLineItems"`
 }
 
-type FullfillmentOrder struct {
+type FulfillmentLineItem struct {
+	LineItem           LineItem `json:"lineItem"`
+	DiscountedTotalSet PriceSet `json:"discountedTotalSet"`
 }
 
 func (o Order) Raw() string {
@@ -83,18 +94,19 @@ func (o *Order) UnmarshalJSON(data []byte) error {
 		CreatedAt                            time.Time      `json:"createdAt"`
 		ProcessedAt                          time.Time      `json:"processedAt"`
 		ClosedAt                             time.Time      `json:"closedAt"`
-		SubtotalPriceSet                     PriceSet       `json:"subtotalPriceSet"`
-		TotalTaxSet                          PriceSet       `json:"totalTaxSet"`
+		CurrentSubtotalPriceSet              PriceSet       `json:"currentSubtotalPriceSet"`
+		CurrentTotalTaxSet                   PriceSet       `json:"currentTotalTaxSet"`
 		TotalShippingPriceSet                PriceSet       `json:"totalShippingPriceSet"`
-		TotalPriceSet                        PriceSet       `json:"totalPriceSet"`
+		CurrentTotalPriceSet                 PriceSet       `json:"currentTotalPriceSet"`
 		TotalReceivedSet                     PriceSet       `json:"totalReceivedSet"`
 		NetPaymentSet                        PriceSet       `json:"netPaymentSet"`
 		LineItems                            struct {
 			Nodes []LineItem `json:"nodes"`
 		} `json:"lineItems"`
-		DisplayFulfillmentStatus string `json:"displayFulfillmentStatus"`
-		Test                     bool   `json:"test"`
-		Closed                   bool   `json:"closed"`
+		Fulfillments             []Fulfillment `json:"fulfillments"`
+		DisplayFulfillmentStatus string        `json:"displayFulfillmentStatus"`
+		Test                     bool          `json:"test"`
+		Closed                   bool          `json:"closed"`
 	}
 	var _o order
 	err := json.Unmarshal(data, &_o)
@@ -115,13 +127,14 @@ func (o *Order) UnmarshalJSON(data []byte) error {
 		CreatedAt:                            _o.CreatedAt,
 		ProcessedAt:                          _o.ProcessedAt,
 		ClosedAt:                             _o.ClosedAt,
-		SubtotalPriceSet:                     _o.SubtotalPriceSet,
-		TotalTaxSet:                          _o.TotalTaxSet,
+		CurrentSubtotalPriceSet:              _o.CurrentSubtotalPriceSet,
+		CurrentTotalTaxSet:                   _o.CurrentTotalTaxSet,
 		TotalShippingPriceSet:                _o.TotalShippingPriceSet,
-		TotalPriceSet:                        _o.TotalPriceSet,
+		CurrentTotalPriceSet:                 _o.CurrentTotalPriceSet,
 		TotalReceivedSet:                     _o.TotalReceivedSet,
 		NetPaymentSet:                        _o.NetPaymentSet,
 		LineItems:                            _o.LineItems.Nodes,
+		Fulfillments:                         _o.Fulfillments,
 		DisplayFulfillmentStatus:             _o.DisplayFulfillmentStatus,
 		Test:                                 _o.Test,
 		Closed:                               _o.Closed,
