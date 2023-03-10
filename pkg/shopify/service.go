@@ -1146,7 +1146,19 @@ func (s Service) UploadInventory() error {
 	}
 	defer f.Close()
 
-	fnis, err := os.OpenFile("not_in_shopify.csv", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+	fbak, err := os.OpenFile("shopify_backup.csv", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		panic(err)
+	}
+	defer fbak.Close()
+	wbak := csv.NewWriter(fbak)
+	// wbak.Write([]string{
+	// 	"SKU",
+	// 	"Quantity",
+	// })
+	// wbak.Flush()
+
+	fnis, err := os.OpenFile("not_in_shopify.csv", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
 	}
@@ -1175,7 +1187,7 @@ func (s Service) UploadInventory() error {
 			return err
 		}
 		if first {
-			w.Write(row)
+			// w.Write(row)
 			first = false
 			continue
 		}
@@ -1191,9 +1203,17 @@ func (s Service) UploadInventory() error {
 			w.Write(row)
 			continue
 		}
+		wbak.Write([]string{
+			ii.Sku,
+			strconv.Itoa(ii.InventoryLevel.Available),
+		})
+		wbak.Flush()
 		quantity, err := strconv.Atoi(row[6])
 		if err != nil {
-			return err
+			quantity = 0
+		}
+		if quantity < 0 {
+			quantity = 0
 		}
 		available := ii.InventoryLevel.Available
 		delta := 0
@@ -1204,11 +1224,11 @@ func (s Service) UploadInventory() error {
 		} else {
 			delta = -(available - quantity)
 		}
+		fmt.Println(sku+" ", delta)
 		err = ii.UpdateQuantity(delta)
 		if err != nil {
 			return err
 		}
-		break
 	}
 	return nil
 } // ./UploadInventory
