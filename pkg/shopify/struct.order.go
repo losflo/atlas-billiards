@@ -29,6 +29,7 @@ type Order struct {
 	Fulfillments                         []Fulfillment  `json:"fulfillments"`
 	DisplayFulfillmentStatus             string         `json:"displayFulfillmentStatus"`
 	DisplayFinancialStatus               string         `json:"displayFinancialStatus"`
+	Tags                                 []string       `json:"tags"`
 	Test                                 bool           `json:"test"`
 	Closed                               bool           `json:"closed"`
 }
@@ -105,6 +106,7 @@ func (o *Order) UnmarshalJSON(data []byte) error {
 		} `json:"lineItems"`
 		Fulfillments             []Fulfillment `json:"fulfillments"`
 		DisplayFulfillmentStatus string        `json:"displayFulfillmentStatus"`
+		Tags                     []string      `json:"tags"`
 		Test                     bool          `json:"test"`
 		Closed                   bool          `json:"closed"`
 	}
@@ -136,6 +138,7 @@ func (o *Order) UnmarshalJSON(data []byte) error {
 		LineItems:                            _o.LineItems.Nodes,
 		Fulfillments:                         _o.Fulfillments,
 		DisplayFulfillmentStatus:             _o.DisplayFulfillmentStatus,
+		Tags:                                 _o.Tags,
 		Test:                                 _o.Test,
 		Closed:                               _o.Closed,
 	}
