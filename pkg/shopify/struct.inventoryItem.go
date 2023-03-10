@@ -2,7 +2,6 @@ package shopify
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/machinebox/graphql"
@@ -33,7 +32,7 @@ func (ii InventoryItem) SetQuantity(quantity int) error {
 } // ./SetQuantity
 
 func (ii InventoryItem) UpdateQuantity(amountDelta int) error {
-	rq := graphql.NewRequest(fmt.Sprintf(`
+	rq := graphql.NewRequest(`
 		mutation inventoryAdjustQuantity($input: InventoryAdjustQuantityInput!) {
 			inventoryAdjustQuantity(input: $input) {
 				inventoryLevel {
@@ -55,7 +54,7 @@ func (ii InventoryItem) UpdateQuantity(amountDelta int) error {
 				}
 			}
 		}
-	`))
+	`)
 	input := map[string]interface{}{
 		"inventoryLevelId": ii.InventoryLevel.ID,
 		"availableDelta":   amountDelta,
